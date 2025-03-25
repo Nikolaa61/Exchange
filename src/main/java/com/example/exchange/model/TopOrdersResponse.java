@@ -3,30 +3,19 @@ package com.example.exchange.model;
 import java.util.List;
 
 public class TopOrdersResponse {
-    private List<Order> buyOrders;
-    private List<Order> sellOrders;
+    private List<PriceLevel> buyOrders;
+    private List<PriceLevel> sellOrders;
 
-    public TopOrdersResponse() {
-    }
-
-    public TopOrdersResponse(List<Order> buyOrders, List<Order> sellOrders) {
+    public TopOrdersResponse(List<PriceLevel> buyOrders, List<PriceLevel> sellOrders) {
         this.buyOrders = buyOrders;
         this.sellOrders = sellOrders;
     }
 
-    public List<Order> getBuyOrders() {
+    public List<PriceLevel> getBuyOrders() {
         return buyOrders;
     }
 
-    public void setBuyOrders(List<Order> buyOrders) {
-        this.buyOrders = buyOrders;
-    }
-
-    public List<Order> getSellOrders() {
+    public List<PriceLevel> getSellOrders() {
         return sellOrders;
-    }
-
-    public void setSellOrders(List<Order> sellOrders) {
-        this.sellOrders = sellOrders;
     }
 }

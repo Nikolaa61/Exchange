@@ -1,10 +1,7 @@
 package com.example.exchange.service;
 
 import com.example.exchange.controller.OrderWebSocketHandler;
-import com.example.exchange.model.MatchRecord;
-import com.example.exchange.model.Order;
-import com.example.exchange.model.OrderType;
-import com.example.exchange.model.TopOrdersResponse;
+import com.example.exchange.model.*;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,10 +66,33 @@ public class OrderService {
      */
     public Mono<TopOrdersResponse> getTopOrders() {
         return Mono.fromCallable(() -> {
-            List<Order> topBuys = getTopN(buyOrders, 10);
-            List<Order> topSells = getTopN(sellOrders, 10);
+            List<PriceLevel> topBuys = getTopNByPriceLevels(buyOrders, 10);
+            List<PriceLevel> topSells = getTopNByPriceLevels(sellOrders, 10);
             return new TopOrdersResponse(topBuys, topSells);
         });
+    }
+
+    private List<PriceLevel> getTopNByPriceLevels(ConcurrentSkipListMap<Double, List<Order>> map, int n) {
+        List<PriceLevel> result = new ArrayList<>(n);
+        int levels = 0;
+
+        for (Map.Entry<Double, List<Order>> entry : map.entrySet()) {
+            double price = entry.getKey();
+            List<Order> orders = entry.getValue();
+
+            int totalAmount = orders.stream()
+                    .mapToInt(Order::getAmount)
+                    .sum();
+
+            OrderType type = orders.get(0).getType(); // BUY ili SELL
+
+            result.add(new PriceLevel(price, totalAmount, type));
+
+            levels++;
+            if (levels >= n) break;
+        }
+
+        return result;
     }
 
     private void addToMap(ConcurrentSkipListMap<Double, List<Order>> map, Order order) {
@@ -196,6 +216,18 @@ public class OrderService {
         this.webSocketHandler = handler;
     }
 
+    public List<MatchRecord> getMatchHistory() {
+        return new ArrayList<>(matchHistory);
+    }
+
+    public List<MatchRecord> getLatestMatches(int limit) {
+        int total = matchHistory.size();
+        if (limit >= total) {
+            return new ArrayList<>(matchHistory);
+        }
+        return new ArrayList<>(matchHistory.subList(total - limit, total));
+    }
+
     @PostConstruct
     public void startWorkers() {
         logger.info("Pokrecem {} workers...", WORKER_COUNT);
@@ -218,17 +250,5 @@ public class OrderService {
             worker.setName("OrderWorker-" + i);
             worker.start();
         }
-    }
-
-    public List<MatchRecord> getMatchHistory() {
-        return new ArrayList<>(matchHistory);
-    }
-
-    public List<MatchRecord> getLatestMatches(int limit) {
-        int total = matchHistory.size();
-        if (limit >= total) {
-            return new ArrayList<>(matchHistory);
-        }
-        return new ArrayList<>(matchHistory.subList(total - limit, total));
     }
 }
