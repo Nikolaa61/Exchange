@@ -7,15 +7,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.util.*;
 import java.util.concurrent.*;
 
 import org.springframework.stereotype.Service;
 import reactor.core.scheduler.Schedulers;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
 
 @Service
 public class OrderService {
@@ -23,11 +19,11 @@ public class OrderService {
     private final List<MatchRecord> matchHistory = new CopyOnWriteArrayList<>();
 
     // Za BUY naloge – key je cena, sortiramo od najveće ka manjoj (reverseOrder)
-    private final ConcurrentSkipListMap<Double, List<Order>> buyOrders =
+    private final ConcurrentSkipListMap<Double, Queue<Order>> buyOrders =
             new ConcurrentSkipListMap<>(Comparator.reverseOrder());
 
     // Za SELL naloge – key je cena, ascending (podrazumevano)
-    private final ConcurrentSkipListMap<Double, List<Order>> sellOrders =
+    private final ConcurrentSkipListMap<Double, Queue<Order>> sellOrders =
             new ConcurrentSkipListMap<>();
 
     private OrderWebSocketHandler webSocketHandler;
@@ -72,19 +68,23 @@ public class OrderService {
         });
     }
 
-    private List<PriceLevel> getTopNByPriceLevels(ConcurrentSkipListMap<Double, List<Order>> map, int n) {
+    private List<PriceLevel> getTopNByPriceLevels(ConcurrentSkipListMap<Double, Queue<Order>> map, int n) {
         List<PriceLevel> result = new ArrayList<>(n);
         int levels = 0;
 
-        for (Map.Entry<Double, List<Order>> entry : map.entrySet()) {
+        for (Map.Entry<Double, Queue<Order>> entry : map.entrySet()) {
             double price = entry.getKey();
-            List<Order> orders = entry.getValue();
+            Queue<Order> orders = entry.getValue();
+
+            if (orders.isEmpty()) {
+                continue;
+            }
 
             int totalAmount = orders.stream()
                     .mapToInt(Order::getAmount)
                     .sum();
 
-            OrderType type = orders.get(0).getType(); // BUY ili SELL
+            OrderType type = orders.peek().getType();
 
             result.add(new PriceLevel(price, totalAmount, type));
 
@@ -95,8 +95,8 @@ public class OrderService {
         return result;
     }
 
-    private void addToMap(ConcurrentSkipListMap<Double, List<Order>> map, Order order) {
-        map.computeIfAbsent(order.getPrice(), k -> new ArrayList<>()).add(order);
+    private void addToMap(ConcurrentSkipListMap<Double, Queue<Order>> map, Order order) {
+        map.computeIfAbsent(order.getPrice(), k -> new ConcurrentLinkedQueue<>()).offer(order);
     }
 
     /**
@@ -127,14 +127,17 @@ public class OrderService {
 
     private void matchBuyOrder(Order buyOrder) {
         while (buyOrder.getAmount() > 0 && !sellOrders.isEmpty()) {
-            Map.Entry<Double, List<Order>> bestSellEntry = sellOrders.firstEntry();
+            Map.Entry<Double, Queue<Order>> bestSellEntry = sellOrders.firstEntry();
             double bestSellPrice = bestSellEntry.getKey();
+            Queue<Order> sellQueue = bestSellEntry.getValue();
 
-            // Moze li BUY da se upari s ovim SELL?
-            if (buyOrder.getPrice() >= bestSellPrice) {
-                List<Order> sellList = bestSellEntry.getValue();
-                Order sellOrder = sellList.get(0);
+            Order sellOrder = sellQueue.peek();
+            if (sellOrder == null) {
+                sellOrders.remove(bestSellPrice);
+                continue;
+            }
 
+            if (buyOrder.getPrice() >= sellOrder.getPrice()) {
                 int matchedAmount = Math.min(buyOrder.getAmount(), sellOrder.getAmount());
 
                 logMatch(buyOrder, sellOrder, matchedAmount);
@@ -142,17 +145,15 @@ public class OrderService {
                 buyOrder = new Order(buyOrder.getPrice(), buyOrder.getAmount() - matchedAmount, buyOrder.getType());
                 Order updatedSell = new Order(sellOrder.getPrice(), sellOrder.getAmount() - matchedAmount, sellOrder.getType());
 
-                // Ažuriraj SELL listu
-                sellList.remove(0);
+                sellQueue.poll(); // ukloni stari
                 if (updatedSell.getAmount() > 0) {
-                    sellList.add(0, updatedSell);
+                    sellQueue.offer(updatedSell); // dodaj novi
                 }
 
-                if (sellList.isEmpty()) {
-                    sellOrders.remove(bestSellPrice);
-                }
+                cleanUpIfEmpty(sellOrders, bestSellPrice);
+
             } else {
-                break; // Nema više pogodnih SELL-ova
+                break;
             }
         }
 
@@ -163,13 +164,17 @@ public class OrderService {
 
     private void matchSellOrder(Order sellOrder) {
         while (sellOrder.getAmount() > 0 && !buyOrders.isEmpty()) {
-            Map.Entry<Double, List<Order>> bestBuyEntry = buyOrders.firstEntry();
+            Map.Entry<Double, Queue<Order>> bestBuyEntry = buyOrders.firstEntry();
             double bestBuyPrice = bestBuyEntry.getKey();
+            Queue<Order> buyQueue = bestBuyEntry.getValue();
 
-            if (bestBuyPrice >= sellOrder.getPrice()) {
-                List<Order> buyList = bestBuyEntry.getValue();
-                Order buyOrder = buyList.get(0);
+            Order buyOrder = buyQueue.peek();
+            if (buyOrder == null) {
+                buyOrders.remove(bestBuyPrice);
+                continue;
+            }
 
+            if (buyOrder.getPrice() >= sellOrder.getPrice()) {
                 int matchedAmount = Math.min(sellOrder.getAmount(), buyOrder.getAmount());
 
                 logMatch(buyOrder, sellOrder, matchedAmount);
@@ -177,22 +182,27 @@ public class OrderService {
                 sellOrder = new Order(sellOrder.getPrice(), sellOrder.getAmount() - matchedAmount, sellOrder.getType());
                 Order updatedBuy = new Order(buyOrder.getPrice(), buyOrder.getAmount() - matchedAmount, buyOrder.getType());
 
-                // Ažuriraj BUY listu
-                buyList.remove(0);
+                buyQueue.poll();
                 if (updatedBuy.getAmount() > 0) {
-                    buyList.add(0, updatedBuy);
+                    buyQueue.offer(updatedBuy);
                 }
 
-                if (buyList.isEmpty()) {
-                    buyOrders.remove(bestBuyPrice);
-                }
+                cleanUpIfEmpty(buyOrders, bestBuyPrice);
+
             } else {
-                break; // Nema više pogodnih BUY-ova
+                break;
             }
         }
 
         if (sellOrder.getAmount() > 0) {
             addToMap(sellOrders, sellOrder);
+        }
+    }
+
+    private void cleanUpIfEmpty(ConcurrentSkipListMap<Double, Queue<Order>> map, double price) {
+        Queue<Order> queue = map.get(price);
+        if (queue != null && queue.isEmpty()) {
+            map.remove(price);
         }
     }
 
