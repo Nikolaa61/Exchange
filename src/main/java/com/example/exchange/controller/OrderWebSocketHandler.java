@@ -4,6 +4,7 @@ import com.example.exchange.model.Order;
 import com.example.exchange.model.OrderRequest;
 import com.example.exchange.model.TopOrdersResponse;
 import com.example.exchange.service.OrderService;
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
@@ -121,6 +122,18 @@ public class OrderWebSocketHandler implements WebSocketHandler {
         } catch (Exception e) {
             return Mono.just(session.textMessage("{\"action\":\"ERROR\",\"payload\":\"Invalid JSON format\"}"));
         }
+    }
+
+    @PreDestroy
+    public void closeAllSessions() {
+        sessions.forEach((id, session) -> {
+            try {
+                session.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+        sessions.clear();
     }
 
 }

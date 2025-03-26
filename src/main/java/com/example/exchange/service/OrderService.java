@@ -3,6 +3,7 @@ package com.example.exchange.service;
 import com.example.exchange.controller.OrderWebSocketHandler;
 import com.example.exchange.model.*;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -17,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 public class OrderService {
 
     private final List<MatchRecord> matchHistory = new CopyOnWriteArrayList<>();
+    private ExecutorService executorService;
 
     // Za BUY naloge – key je cena, sortiramo od najveće ka manjoj (reverseOrder)
     private final ConcurrentSkipListMap<Double, Queue<Order>> buyOrders =
@@ -238,12 +240,40 @@ public class OrderService {
         return new ArrayList<>(matchHistory.subList(total - limit, total));
     }
 
+//    @PostConstruct
+//    public void startWorkers() {
+//        logger.info("Pokrecem {} workers...", WORKER_COUNT);
+//        for (int i = 0; i < WORKER_COUNT; i++) {
+//            Thread worker = new Thread(() -> {
+//                while (true) {
+//                    try {
+//                        Order order = orderQueue.take(); // čeka na red
+//                        match(order);
+//                        logger.debug("Obradjen nalog: {}", order);
+//                        if (orderQueue.size() % 100 == 0) {
+//                            logger.info("Queue size: {}", orderQueue.size());
+//                        }
+//                    } catch (Exception e) {
+//                        logger.error("Worker greska", e);
+//                    }
+//                }
+//            });
+//            worker.setDaemon(true);
+//            worker.setName("OrderWorker-" + i);
+//            worker.start();
+//        }
+//    }
+
     @PostConstruct
     public void startWorkers() {
         logger.info("Pokrecem {} workers...", WORKER_COUNT);
+        executorService = Executors.newFixedThreadPool(WORKER_COUNT);
+
         for (int i = 0; i < WORKER_COUNT; i++) {
-            Thread worker = new Thread(() -> {
-                while (true) {
+            int finalI = i;
+            executorService.submit(() -> {
+                Thread.currentThread().setName("OrderWorker-" + finalI);
+                while (!Thread.currentThread().isInterrupted()) {
                     try {
                         Order order = orderQueue.take(); // čeka na red
                         match(order);
@@ -251,14 +281,28 @@ public class OrderService {
                         if (orderQueue.size() % 100 == 0) {
                             logger.info("Queue size: {}", orderQueue.size());
                         }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt(); // označi kao prekinutu
+                        break;
                     } catch (Exception e) {
                         logger.error("Worker greska", e);
                     }
                 }
             });
-            worker.setDaemon(true);
-            worker.setName("OrderWorker-" + i);
-            worker.start();
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        logger.info("Gasenje worker niti...");
+        executorService.shutdownNow();
+        try {
+            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+                logger.warn("Niti nisu zavrsile na vreme – forsiram gasenje.");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Prekid prilikom gasenja niti.", e);
         }
     }
 }
