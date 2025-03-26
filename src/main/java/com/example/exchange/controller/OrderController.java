@@ -26,11 +26,10 @@ public class OrderController {
      * @return
      */
     @PostMapping
-    public Mono<Void> createOrder(@RequestBody @Valid Mono<OrderRequest> requestMono) {
+    public Mono<Order> createOrder(@RequestBody @Valid Mono<OrderRequest> requestMono) {
         return requestMono
                 .map(req -> new Order(req.getPrice(), req.getAmount(), req.getType()))
-                .flatMap(orderService::addOrder)
-                .then();
+                .flatMap(orderService::addOrder);
     }
 
     /**

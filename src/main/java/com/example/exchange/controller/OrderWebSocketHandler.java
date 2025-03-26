@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -126,14 +127,22 @@ public class OrderWebSocketHandler implements WebSocketHandler {
 
     @PreDestroy
     public void closeAllSessions() {
-        sessions.forEach((id, session) -> {
-            try {
-                session.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
+        System.out.println("Zatvaram sve WebSocket sesije...");
+
+        List<Mono<?>> closeMonos = sessions.values().stream()
+                .map(session -> {
+                    try {
+                        return session.close();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        return Mono.empty();
+                    }
+                })
+                .toList();
+
         sessions.clear();
+
+        Mono.when(closeMonos).block(); // blokira dok se sve sesije ne zatvore
     }
 
 }

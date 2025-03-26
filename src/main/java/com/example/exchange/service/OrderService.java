@@ -6,6 +6,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
@@ -16,6 +17,9 @@ import reactor.core.scheduler.Schedulers;
 
 @Service
 public class OrderService {
+
+    @Value("${dummy.orders.enabled:false}")
+    private boolean dummyOrdersEnabled;
 
     private final List<MatchRecord> matchHistory = new CopyOnWriteArrayList<>();
     private ExecutorService executorService;
@@ -240,30 +244,6 @@ public class OrderService {
         return new ArrayList<>(matchHistory.subList(total - limit, total));
     }
 
-//    @PostConstruct
-//    public void startWorkers() {
-//        logger.info("Pokrecem {} workers...", WORKER_COUNT);
-//        for (int i = 0; i < WORKER_COUNT; i++) {
-//            Thread worker = new Thread(() -> {
-//                while (true) {
-//                    try {
-//                        Order order = orderQueue.take(); // čeka na red
-//                        match(order);
-//                        logger.debug("Obradjen nalog: {}", order);
-//                        if (orderQueue.size() % 100 == 0) {
-//                            logger.info("Queue size: {}", orderQueue.size());
-//                        }
-//                    } catch (Exception e) {
-//                        logger.error("Worker greska", e);
-//                    }
-//                }
-//            });
-//            worker.setDaemon(true);
-//            worker.setName("OrderWorker-" + i);
-//            worker.start();
-//        }
-//    }
-
     @PostConstruct
     public void startWorkers() {
         logger.info("Pokrecem {} workers...", WORKER_COUNT);
@@ -289,6 +269,22 @@ public class OrderService {
                     }
                 }
             });
+        }
+
+        if (dummyOrdersEnabled) {
+            logger.info("Ubacujem dummy BUY i SELL naloge za testiranje...");
+
+            Random random = new Random();
+
+            for (int i = 1; i <= 20; i++) {
+                double buyPrice = 110 + random.nextDouble() * 10; // 110.0 - 120.0
+                int buyAmount = 1 + random.nextInt(10); // 1 - 10
+                addToMap(buyOrders, new Order(buyPrice, buyAmount, OrderType.BUY));
+
+                double sellPrice = 80 + random.nextDouble() * 10; // 80.0 - 90.0
+                int sellAmount = 1 + random.nextInt(10); // 1 - 10
+                addToMap(sellOrders, new Order(sellPrice, sellAmount, OrderType.SELL));
+            }
         }
     }
 
