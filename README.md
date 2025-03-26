@@ -73,26 +73,122 @@ Returns a JSON representation of the created order.
 
 ### 2. Top 10 Orders
 
+### Optional: Enable Dummy Orders for Testing
+
+If you'd like to see a pre-populated order book with random BUY and SELL orders (to test sorting logic), you can enable dummy orders by updating the following line in `src/main/resources/application.properties`:
+
+```properties
+dummy.orders.enabled=true
+```
 **GET** `/api/orders/top`
 
 #### Response:
-
 ```json
 {
-  "buyOrders": [
-    {
-      "price": 120.5,
-      "amount": 12,
-      "type": "BUY"
-    }
-  ],
-  "sellOrders": [
-    {
-      "price": 80.0,
-      "amount": 5,
-      "type": "SELL"
-    }
-  ]
+    "buyOrders": [
+        {
+            "price": 119.64514696244936,
+            "totalAmount": 7,
+            "type": "BUY"
+        },
+        {
+            "price": 118.83471404546154,
+            "totalAmount": 1,
+            "type": "BUY"
+        },
+        {
+            "price": 118.50053156569098,
+            "totalAmount": 7,
+            "type": "BUY"
+        },
+        {
+            "price": 118.33654386712232,
+            "totalAmount": 6,
+            "type": "BUY"
+        },
+        {
+            "price": 118.0872793976556,
+            "totalAmount": 2,
+            "type": "BUY"
+        },
+        {
+            "price": 117.64610010292567,
+            "totalAmount": 7,
+            "type": "BUY"
+        },
+        {
+            "price": 117.40257395214128,
+            "totalAmount": 7,
+            "type": "BUY"
+        },
+        {
+            "price": 117.13202219630004,
+            "totalAmount": 5,
+            "type": "BUY"
+        },
+        {
+            "price": 116.86075447049659,
+            "totalAmount": 2,
+            "type": "BUY"
+        },
+        {
+            "price": 116.76273345780541,
+            "totalAmount": 1,
+            "type": "BUY"
+        }
+    ],
+    "sellOrders": [
+        {
+            "price": 80.10811552750376,
+            "totalAmount": 7,
+            "type": "SELL"
+        },
+        {
+            "price": 80.76492807486854,
+            "totalAmount": 2,
+            "type": "SELL"
+        },
+        {
+            "price": 81.31025723318564,
+            "totalAmount": 7,
+            "type": "SELL"
+        },
+        {
+            "price": 81.61303154059264,
+            "totalAmount": 1,
+            "type": "SELL"
+        },
+        {
+            "price": 81.71723817573296,
+            "totalAmount": 4,
+            "type": "SELL"
+        },
+        {
+            "price": 81.89963068999731,
+            "totalAmount": 5,
+            "type": "SELL"
+        },
+        {
+            "price": 82.14938096442503,
+            "totalAmount": 6,
+            "type": "SELL"
+        },
+        {
+            "price": 83.2661567391802,
+            "totalAmount": 3,
+            "type": "SELL"
+        },
+        {
+            "price": 84.62723526595155,
+            "totalAmount": 2,
+            "type": "SELL"
+        },
+        {
+            "price": 84.77995123480116,
+            "totalAmount": 1,
+            "type": "SELL"
+        }
+    ]
 }
 ```
 
